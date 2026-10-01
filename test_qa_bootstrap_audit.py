@@ -190,12 +190,44 @@ class Robustness(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
 
-    def test_invalid_package_json_exits_with_message(self):
-        p = os.path.join(self.root, "package.json")
+    def write(self, rel, content="x"):
+        p = os.path.join(self.root, rel)
+        os.makedirs(os.path.dirname(p) or self.root, exist_ok=True)
         with open(p, "w", encoding="utf-8") as fh:
-            fh.write("{not json")
-        with self.assertRaises(SystemExit):
-            qa.load_pkg(self.root)
+            fh.write(content)
+
+    def test_malformed_package_json_does_not_abort_the_audit(self):
+        """An audit must never refuse to run because one file is unparseable.
+
+        Found on first contact with a bare project: a half-written
+        package.json made the tool hard-exit, turning a diagnostic into a
+        blocker for exactly the user most likely to hit it - someone
+        bootstrapping an empty repo.
+        """
+        self.write("package.json", "{not json")
+        self.write("tests/e2e/a.spec.ts")
+        rep = qa.audit(self.root)          # must NOT raise
+        self.assertIn("unreadable-package-json",
+                      [w["id"] for w in rep["warnings"]])
+        # And it must still report what it could determine.
+        self.assertTrue(rep["layers"]["e2e"]["present"])
+
+    def test_malformed_package_json_yields_empty_scripts(self):
+        self.write("package.json", "{not json")
+        pkg, err = qa.load_pkg(self.root)
+        self.assertEqual(pkg, {})
+        self.assertIsNotNone(err)
+
+    def test_valid_package_json_has_no_error(self):
+        self.write("package.json", '{"scripts":{"test":"x"}}')
+        pkg, err = qa.load_pkg(self.root)
+        self.assertEqual(pkg["scripts"], {"test": "x"})
+        self.assertIsNone(err)
+
+    def test_missing_package_json_is_not_an_error(self):
+        pkg, err = qa.load_pkg(self.root)
+        self.assertEqual(pkg, {})
+        self.assertIsNone(err)
 
     def test_unreadable_file_is_treated_as_empty(self):
         # read() must never raise, even on a binary or locked file.

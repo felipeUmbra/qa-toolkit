@@ -197,17 +197,25 @@ def detect_stack(root, pkg):
 
 
 def load_pkg(root):
+    """Load package.json, tolerating absence AND malformed content.
+
+    An audit must never refuse to run because one file is unparseable - that
+    turns a diagnostic into a blocker, and a user bootstrapping an empty
+    project is the most likely person to hit a half-written file. Degrade to an
+    empty result and let the audit report what it can; the malformed file is
+    itself a finding worth surfacing.
+    """
     raw = read(os.path.join(root, "package.json"))
-    if not raw:
-        return {}
+    if not raw.strip():
+        return {}, None
     try:
-        return json.loads(raw)
+        return json.loads(raw), None
     except json.JSONDecodeError as exc:
-        raise SystemExit(f"ERROR: package.json is not valid JSON: {exc}")
+        return {}, f"package.json is not valid JSON ({exc})"
 
 
 def audit(root):
-    pkg = load_pkg(root)
+    pkg, pkg_error = load_pkg(root)
     scripts = pkg.get("scripts", {}) or {}
     ci_files = sorted(find_all(root, [
         ".github/workflows/*.yml", ".github/workflows/*.yaml",
@@ -226,6 +234,15 @@ def audit(root):
         "warnings": [],
         "gaps": [],
     }
+
+    if pkg_error:
+        report["warnings"].append({
+            "id": "unreadable-package-json",
+            "severity": "medium",
+            "message": pkg_error + ". Audit continued with scripts treated as "
+                       "absent, so any gate wired only through npm will look "
+                       "unwired.",
+        })
 
     for key, name, patterns, evidence in LAYERS:
         hits = find_all(root, patterns)
