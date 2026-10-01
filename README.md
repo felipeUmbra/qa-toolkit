@@ -18,6 +18,29 @@ tool here exists because that specific failure happened in a real repository:
 | **Shared cache key** | Two CI jobs shared one browser cache key. First job populated it; the rest skipped `playwright install` and failed with "Executable doesn't exist" — 90 of 94 tests, reading as a product failure. | `templates.md` + `test_templates.py` |
 | **Triage that fires on green** | A CI-failure triage job would re-read a *passing* suite every run. | `test_templates.py` → `test_defect_hunt_triage_only_runs_on_failure` |
 
+## Fetching these from the agent
+
+Pin to a commit SHA. **Do not fetch from `main`.**
+
+```
+https://raw.githubusercontent.com/felipeUmbra/qa-toolkit/<SHA>/qa_bootstrap_audit.py
+```
+
+Verified behaviour: after a commit landed on `main`, the `main` URL kept serving
+the *previous* file for an extended period, and a `?cb=<timestamp>` cache-buster
+**did not defeat it**. The SHA-pinned URL served the new content immediately.
+
+| URL form | Result after a push |
+|---|---|
+| `.../main/qa_bootstrap_audit.py` | stale — old content |
+| `.../main/...py?cb=12345` | stale — cache-buster ignored |
+| `.../<SHA>/qa_bootstrap_audit.py` | current |
+
+So `main` gives an agent a script that looks fine and quietly lacks every recent
+fix. Pin the SHA, and treat a fetch failure as a hard stop — never reconstruct
+the tool from memory, because a reconstructed script carries the bugs this
+toolkit exists to remove.
+
 ## Tools
 
 ### `qa_bootstrap_audit.py` — read-only

@@ -4,8 +4,11 @@ Copy-paste starting points for a project's quality flow. Each is a **template,
 not a finished workflow** — replace `<...>` placeholders and delete what does
 not apply. Copy only the gates the project actually has.
 
-Fetched by the QA agent's bootstrap step. If a URL 404s, the agent must say so
-rather than fall back to writing YAML from memory.
+Fetched by the QA agent's bootstrap step. **Pin the URL to a commit SHA** — the
+`main` branch of a raw URL has been observed serving stale content after a push,
+and a `?cb=` cache-buster does not defeat it. A stale template is worse than
+none, because it looks authoritative. If a fetch fails, say so rather than
+reconstructing the YAML from memory.
 
 | Template | Purpose |
 |---|---|
