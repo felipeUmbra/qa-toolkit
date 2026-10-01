@@ -47,7 +47,7 @@ still stand on their own.
 - **App**: Kanban board with Google Drive sync, rich text editor, drag-and-drop, PWA
 - **Stack**: React 18, TypeScript, Vite, @dnd-kit, @tiptap, Workbox (PWA)
 - **Test framework**: Playwright for E2E (`tests/e2e/`), Vitest for unit tests (`tests/unit/`, colocated `src/**/*.test.ts`)
-- **Test count**: 522 unit tests; 94 cross-browser smoke tests across 2 engines; Chromium matrix of 338 passing / 18 skipped
+- **Test count**: ~778 unit tests (Vitest, 25 files); ~502 Chromium tests across 5 projects (desktop 172, tablet 161, mobile 161, pwa 6, pwa-subpath 2); 50 smoke tests per engine on firefox and webkit. **Re-derive these before quoting them** — `npx vitest run` and `npx playwright test --list --project=<p>` — because a stale count is worse than no count.
 - **Projects**: `chromium-desktop`, `chromium-tablet`, `chromium-mobile`, `pwa` (production preview) plus `firefox-smoke` and `webkit-smoke`
 - **CI**: `workers: process.env.CI ? 1 : undefined`, `retries: process.env.CI ? 2 : 0`
 
