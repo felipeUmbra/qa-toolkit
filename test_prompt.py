@@ -204,6 +204,48 @@ class RuntimePreflight(unittest.TestCase):
         self.assertIn("do not install Python uninvited", self.text)
 
 
+class WritabilityPreflight(unittest.TestCase):
+    """Phases 2-10 all create files. A silent write failure looks like success.
+
+    A rejected write and a successful one are indistinguishable in the final
+    report unless the agent tracked them. So the prompt must probe first and
+    must forbid reporting an unwritten phase as done.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = prompt_text()
+
+    def test_probes_writability_before_starting(self):
+        self.assertIn("NOT_WRITABLE", self.text)
+        self.assertIn("WRITABLE", self.text)
+        self.assertIn(".qa-write-check", self.text,
+                      "the probe must clean up after itself")
+
+    def test_write_failure_section_exists(self):
+        self.assertIn("## If a write fails", self.text)
+
+    def test_says_stop_and_report_rather_than_retrying(self):
+        self.assertIn("Do not retry blindly", self.text)
+        self.assertIn("stop and report", self.text.lower())
+
+    def test_forbids_reporting_an_unwritten_phase_as_done(self):
+        self.assertIn(
+            "Never report a phase as done when its file was not created",
+            self.text)
+
+    def test_forbids_leaving_truncated_files(self):
+        self.assertIn("truncated or empty file", self.text)
+
+    def test_report_must_include_incomplete_phases(self):
+        self.assertIn("Any phase you could not complete", self.text)
+
+    def test_does_not_tell_the_agent_to_chmod_or_reformat(self):
+        low = self.text.lower()
+        self.assertIn("do not change permissions", low,
+                      "the remedy must stay safe and non-destructive")
+
+
 class WorkflowContent(unittest.TestCase):
     """The prompt must carry the rules that were learned the hard way."""
 

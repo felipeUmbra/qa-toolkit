@@ -151,6 +151,33 @@ What must never happen: continuing as though the audit ran and found nothing.
 An audit that never executed and an audit that found nothing look identical, and
 the second reading is the one that gets believed.
 
+### 0c. Can you actually write to this project?
+
+Every remaining phase creates files. If you cannot write, phases 3 to 10 cannot
+complete, and the failure will not be obvious: a rejected write may look like a
+succeeded one if nobody checks.
+
+So prove writability before starting, rather than discovering it at phase 7:
+
+```bash
+mkdir -p .qa-write-check && echo ok > .qa-write-check/probe && rm -rf .qa-write-check && echo WRITABLE || echo "NOT_WRITABLE"
+```
+
+Also confirm you can create the directories each phase needs - `.github/workflows/`,
+`tests/`, `scripts/`. A repository that can create a file in its root but not a
+nested directory is unusual but real (sparse checkout, a partial mount, a
+`.gitignore` that redirects nothing, or a `package.json` `workspaces` layout).
+
+| Result | What you do |
+|---|---|
+| `WRITABLE` | Say nothing. Continue to phase 1. |
+| `NOT_WRITABLE` | **Stop before writing anything.** Tell the user plainly, name the failing path, and list what you would have created. |
+| Probe cannot run at all | Treat as `NOT_WRITABLE` and say why. |
+
+**Never report a phase as done when its file was not created.** A phase that
+wrote nothing and a phase that succeeded are indistinguishable in the final
+report unless you keep track, so track it - see the protocol below.
+
 ---
 
 ## Phase 1 - Interview the user
@@ -344,6 +371,50 @@ The step everyone skips, and the reason this flow exists.
 
 ---
 
+## If a write fails
+
+Applies anywhere in phases 2 to 10. Real causes: a read-only checkout, a
+permission-denied path, a file locked by a running dev server or editor, a full
+disk, a path that already exists as a directory, or a sandbox that permits reads
+but not writes.
+
+**Stop writing. Do not retry blindly.** A retry loop against a permission error
+just burns turns and can leave half-written files behind.
+
+Then, in this order:
+
+1. **Establish which case you are in.** `PermissionError` or `errno 13` is a
+   rights problem; `FileNotFoundError` or `errno 2` usually means a parent
+   directory does not exist, which is often just fixable; `IsADirectoryError`
+   means the path is already a directory; a full disk shows up as `errno 28`.
+   Read the error. Do not guess.
+2. **Try at most one safe remedy** - create the missing parent directory, or
+   close a handle you know you are holding. Do not change permissions, and do
+   not reformat anything to make a write succeed.
+3. **If it still fails, stop and report.** Say which path failed, the actual
+   error, which phases completed, and which did not.
+
+### Leave the project in a state someone else can finish from
+
+A half-applied bootstrap is worse than none, because it looks done.
+
+- Do not leave a truncated or empty file where a real one should be. If a write
+  failed partway, remove the stub or complete it - never leave a file that
+  parses as valid YAML but has no jobs in it.
+- Keep an explicit list of what was created, in order. The final report depends
+  on it, and it is the only way the user can resume.
+- Never re-run a phase blindly over a partial result. Re-read what is on disk
+  first; the flow is designed so phases 2 to 10 look at the repo before writing,
+  so a re-run should be safe, but only because they check.
+
+### Say what did not happen
+
+The final report promises every file created and every gate observed failing. If
+any phase was skipped, that report must say so in the same breath, naming the
+phase and the reason. A report that lists four completed phases and quietly
+omits the fifth is the failure this whole toolkit exists to prevent - the
+uninvoked rule that read like a guarantee.
+
 ## Report
 
 Finish with:
@@ -354,6 +425,7 @@ Finish with:
   it.
 - Anything deliberately deferred, and why.
 - Anything you could not verify, stated plainly rather than implied.
+- **Any phase you could not complete**, with the path that failed and the error, or an explicit "none". Never let a partial run read as a complete one.
 
 Do not claim a gate works because you wrote it. Claim it works because you
 watched it fail.

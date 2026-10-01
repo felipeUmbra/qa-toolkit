@@ -199,6 +199,25 @@ Two details worth knowing:
 
 ---
 
+## Agent files
+
+The QA agent is tracked here too, in [`agents/`](agents/README.md):
+
+| File | Scope |
+|---|---|
+| `agents/user/qa.agent.md` | Framework **doctrine** — installs to `%APPDATA%\Code\User\agents\` |
+| `agents/project-example/kboard.qa.agent.md` | One project's **facts** — installs to `<repo>/.github/agents/` |
+
+They are deliberately **not** copies. Doctrine that lives in a repo stops being
+true elsewhere and gets maintained twice; facts that live globally stop being
+true the moment there is a second project. A repo file that restates the method
+will drift, so `test_agents.py` fails the build when one does.
+
+Tracking them here is what makes them recoverable — a file that only exists in
+a user profile has no history and no way back.
+
+---
+
 ## Other tools
 
 Use these directly if you want to check a repo without running the whole flow.
@@ -274,8 +293,9 @@ so a bump cannot be forgotten when the prompt is rebuilt.
 |---|---|
 | `test_qa_bootstrap_audit.py` | the audit, including the brace-expansion bug |
 | `test_templates.py` | every YAML fence parses; per-browser cache keys; unconditional install; three triggers; `issues: write` without `contents: write`; triage gated on failure; heredoc indentation |
-| `test_prompt.py` | frontmatter, fence balance, embedded script is byte-identical and still executes, builder/artifact agreement |
-| `test_qa_toolkit_refresh.py` | current / stale / offline / ambiguous / missing, install safety |
+| `test_prompt.py` | frontmatter, fence balance, embedded script is byte-identical and still executes, builder/artifact agreement, interpreter and writability preflights |
+| `test_qa_toolkit_refresh.py` | current / stale / offline / ambiguous / missing, install safety, first-time install |
+| `test_agents.py` | the tracked agent files: routing verbs survive, user/project split is respected, no doctrine copied between them |
 
 No pytest dependency on purpose — these must run anywhere, including a machine
 with only the standard library.
