@@ -11,6 +11,9 @@ Your job is to stand up a working quality flow for THIS repository, in the
 right order, and to prove each piece actually gates. Work through the phases
 below in order. Do not skip phase 1 - asking is not optional.
 
+Two pre-flight checks run before anything else: is this prompt current,
+and is there an interpreter to run the audit with. Neither may block the flow.
+
 Two rules govern everything else:
 
 - **Never scaffold over something that already exists.** Phase 1 exists to
@@ -20,7 +23,9 @@ Two rules govern everything else:
 
 ---
 
-## Phase 0 - Check this prompt is current (non-blocking)
+## Phase 0 - Pre-flight: check this prompt is current, and that a runtime exists
+
+### 0a. Is the toolkit current?
 
 You may be running an older copy of this prompt. The repository it came from
 gains fixes; an installed file does not. A stale bootstrap prompt is worse than
@@ -54,6 +59,52 @@ Three rules govern this phase:
    actually compared two, and say plainly when you could not.
 3. **Never reconstruct the refresh logic from memory** if the helper is
    missing. Download it, or report that it is absent.
+
+### 0b. Is there an interpreter to run the audit with?
+
+Phase 2 runs a Python script, and this toolkit exists to serve JavaScript
+projects that have never had Python installed. So check before relying on it:
+
+```bash
+python3 --version 2>/dev/null || python --version 2>/dev/null || py --version 2>/dev/null || echo "NO_PYTHON"
+```
+
+**If this prints `NO_PYTHON`, do not silently continue to phase 2.** A missing
+interpreter makes the audit fail in one of two ways, and both are dangerous:
+
+- **`python` is not recognised.** The command errors, and an agent that does
+  not check will report "the audit produced no findings" and conclude the
+  project has no quality flow at all. It has one; the tool simply never ran.
+- **`python` resolves to a shim** - notably the Microsoft Store alias, which can
+  print nothing and **exit 0**. That reads exactly like a clean audit of an
+  empty project, and it is the worst case: it is indistinguishable from success.
+
+Either way, say so plainly and use the phase 2 fallback rather than proceeding
+as though the audit ran.
+
+If it prints a version, note it and carry on. When a version *is* available,
+prefer `python3`, then `python`, then `py` - and do not install or upgrade an
+interpreter without asking the user first.
+
+### If no interpreter is available
+
+Do not stop the bootstrap, and do not install Python uninvited. In order of
+preference:
+
+1. **Use what the project already has.** A JavaScript project has `node`. The
+   audit is a read-only inspection, so porting its checks to a short `node -e`
+   script is entirely mechanical: read the files, apply the same rules, print
+   the same layers. Say that you did this and why.
+2. **Do the audit by reading.** Phase 2 can be done with the file-reading tools
+   alone - check `package.json` scripts, workflow files, test configs, and agent
+   files directly. Slower, and it will miss what a glob would have caught, but
+   it is real evidence rather than an assumption.
+3. **Tell the user what is skipped.** If neither is possible, say plainly that
+   the automated audit did not run and why. Do not report a clean result.
+
+What must never happen: continuing as though the audit ran and found nothing.
+An audit that never executed and an audit that found nothing look identical, and
+the second reading is the one that gets believed.
 
 ---
 
@@ -111,6 +162,12 @@ registered.
 
 Reconcile the audit against phase 1 before writing anything. Where they
 disagree, say so and trust the audit for what is present.
+
+**If phase 0b found no interpreter, do not run the script below.** Follow the
+fallback in phase 0 instead - port the checks to `node`, or audit by reading.
+Either way the audit layer is still written to `scripts/qa_bootstrap_audit.py`
+so the project keeps it; you are only choosing how to produce this one run's
+findings.
 
 ### The audit script
 
@@ -558,16 +615,18 @@ Copy-paste starting points for a project's quality flow. Each is a **template,
 not a finished workflow** — replace `<...>` placeholders and delete what does
 not apply. Copy only the gates the project actually has.
 
-Fetched by the QA agent's bootstrap step. **Pin the URL to a commit SHA** — the
-`main` branch of a raw URL has been observed serving stale content after a push,
-and a `?cb=` cache-buster does not defeat it. A stale template is worse than
-none, because it looks authoritative. If a fetch fails, say so rather than
-reconstructing the YAML from memory.
+These ship **embedded inside `initqa.prompt.md`**, so there is nothing to fetch
+and no URL that can go stale. Copy them straight out of the prompt.
 
 | Template | Purpose |
 |---|---|
 | `ci-gates.yml` | Type-check + unit + accessibility + E2E on every PR |
 | `defect-hunt.yml` | Invokes the QA agent: manual hunt, nightly backstop, CI triage |
+
+If you are reading this file standalone on a machine, treat it as a copy of the
+authoritative version in the prompt. A reconstructed workflow template is worse
+than none, because it looks authoritative — if you cannot obtain the real one,
+say so rather than writing YAML from memory.
 
 ---
 

@@ -88,6 +88,32 @@ seen fail is not a gate.
 
 ---
 
+## Requirements
+
+**None for the prompt itself** — `/initqa` is a Markdown file, so the interview
+and the scaffolding phases work with no runtime installed at all.
+
+**Python 3.8+ is needed for two things only:**
+
+| Needs Python | Does not |
+|---|---|
+| The Phase 0 freshness check | The interview (phase 1) |
+| The Phase 2 quality audit | Scaffolding tests, E2E, a11y, CI, and agents |
+| | Phase 10, proving the gates gate |
+
+If you have no Python, `/initqa` says so and falls back to auditing with `node`
+— which your project already has, since it is a JavaScript project — or by
+reading the repo directly. Nothing is installed without asking you first.
+
+> **A trap worth knowing.** On Windows, `python` can resolve to the Microsoft
+> Store alias, which prints nothing and **exits 0**. That looks exactly like a
+> clean audit of a repo with no quality flow. The prompt checks for an
+> interpreter first and is explicitly forbidden from reporting an audit that
+> never ran as a clean result — but if you run the audit by hand, verify you
+> got real output, not silence.
+
+---
+
 ## What `/initqa` creates in your project
 
 Nothing is written until Phase 2 has read what you already have, so you never

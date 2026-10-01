@@ -169,6 +169,41 @@ class BuildDriftTests(unittest.TestCase):
         self.assertIn("toolkit-version: %s" % expected, prompt_text())
 
 
+class RuntimePreflight(unittest.TestCase):
+    """Phase 2 depends on Python. A JS project may not have it.
+
+    The dangerous case is not a loud error - it is a shim that prints nothing
+    and exits 0, which reads exactly like a clean audit of an empty repo. So
+    the prompt must check for an interpreter and must forbid reporting a
+    never-executed audit as a clean result.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = prompt_text()
+
+    def test_checks_for_an_interpreter_before_the_audit(self):
+        self.assertIn("NO_PYTHON", self.text)
+        self.assertIn("--version", self.text)
+
+    def test_warns_about_the_silent_shim_failure_mode(self):
+        self.assertIn("exit 0", self.text,
+                      "must warn that a shim can succeed while printing nothing")
+
+    def test_forbids_reporting_a_skipped_audit_as_clean(self):
+        self.assertIn(
+            "continuing as though the audit ran and found nothing", self.text,
+            "the prompt must forbid the silent-success misreading")
+
+    def test_offers_a_fallback_when_there_is_no_interpreter(self):
+        self.assertIn("If no interpreter is available", self.text)
+        self.assertIn("node", self.text,
+                      "a JS project has node; the audit is a read-only script")
+
+    def test_does_not_tell_the_agent_to_install_python_uninvited(self):
+        self.assertIn("do not install Python uninvited", self.text)
+
+
 class WorkflowContent(unittest.TestCase):
     """The prompt must carry the rules that were learned the hard way."""
 
