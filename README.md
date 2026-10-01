@@ -26,6 +26,11 @@ Pin to a commit SHA. **Do not fetch from `main`.**
 https://raw.githubusercontent.com/felipeUmbra/qa-toolkit/<SHA>/qa_bootstrap_audit.py
 ```
 
+**Keep the filename.** Save it as `qa_bootstrap_audit.py`. The test modules
+`import qa_bootstrap_audit`, so renaming it makes them fail to import — and a
+test suite that cannot run is worse than none. This was found by simulating a
+fresh machine and renaming the file, which is the only way to find it.
+
 Verified behaviour: after a commit landed on `main`, the `main` URL kept serving
 the *previous* file for an extended period, and a `?cb=<timestamp>` cache-buster
 **did not defeat it**. The SHA-pinned URL served the new content immediately.
