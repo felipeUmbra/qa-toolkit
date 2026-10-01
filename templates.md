@@ -4,16 +4,18 @@ Copy-paste starting points for a project's quality flow. Each is a **template,
 not a finished workflow** — replace `<...>` placeholders and delete what does
 not apply. Copy only the gates the project actually has.
 
-Fetched by the QA agent's bootstrap step. **Pin the URL to a commit SHA** — the
-`main` branch of a raw URL has been observed serving stale content after a push,
-and a `?cb=` cache-buster does not defeat it. A stale template is worse than
-none, because it looks authoritative. If a fetch fails, say so rather than
-reconstructing the YAML from memory.
+These ship **embedded inside `initqa.prompt.md`**, so there is nothing to fetch
+and no URL that can go stale. Copy them straight out of the prompt.
 
 | Template | Purpose |
 |---|---|
 | `ci-gates.yml` | Type-check + unit + accessibility + E2E on every PR |
 | `defect-hunt.yml` | Invokes the QA agent: manual hunt, nightly backstop, CI triage |
+
+If you are reading this file standalone on a machine, treat it as a copy of the
+authoritative version in the prompt. A reconstructed workflow template is worse
+than none, because it looks authoritative — if you cannot obtain the real one,
+say so rather than writing YAML from memory.
 
 ---
 

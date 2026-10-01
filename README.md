@@ -1,181 +1,275 @@
 # qa-toolkit
 
-Small, dependency-free tools for standing up and checking a project's quality
-flow. Hosted so any machine, any repo, any agent can use them.
+Stand up a project's quality flow — tests, accessibility gates, CI, a QA agent
+and a defect register — from a single command, then keep it honest.
 
 **Pure standard library.** Python 3.8+. No install, no venv, no `pip`.
 
-## Why these exist
+---
 
-A repo can have tests, gates, CI, an agent file documenting bug-filing rules —
-and still have a defect register that is empty and gates that cannot fail. Every
-tool here exists because that specific failure happened in a real repository:
+## Quickstart
 
-| Failure | What went wrong | What catches it |
-|---|---|---|
-| **Uninvoked rule** | Agent documented "file every Medium/High defect"; no workflow ever invoked the agent. A defect sat in the **first commit**, survived ~49 commits, and was found and fixed without ever being registered. | `qa_bootstrap_audit.py` → `agent-never-invoked` |
-| **Unwired gate** | A whole test layer existed and was wired into no npm script and no CI job. It could not fail anything. | `qa_bootstrap_audit.py` → "cannot gate" gap |
-| **Shared cache key** | Two CI jobs shared one browser cache key. First job populated it; the rest skipped `playwright install` and failed with "Executable doesn't exist" — 90 of 94 tests, reading as a product failure. | `templates.md` + `test_templates.py` |
-| **Triage that fires on green** | A CI-failure triage job would re-read a *passing* suite every run. | `test_templates.py` → `test_defect_hunt_triage_only_runs_on_failure` |
+### 1. Get the file
 
-## Fetching these from the agent
+Download **`initqa.prompt.md`** from this repo — that one file is the whole
+toolkit. The audit script and both workflow templates are embedded inside it,
+so there is nothing else to fetch and no URL that can go stale.
 
-### Preferred: `/initqa` (self-contained, no fetch at all)
+The **easiest way** is to fetch the refresh helper and let it install the
+prompt for you. It picks the right file, finds your prompts folder, and
+verifies what it downloaded:
 
-`initqa.prompt.md` in this repo **embeds the audit script and both workflow
-templates inline**. Drop it into your prompts folder and run `/initqa`:
+```bash
+curl -O https://raw.githubusercontent.com/felipeUmbra/qa-toolkit/main/qa_toolkit_refresh.py
+curl -O https://raw.githubusercontent.com/felipeUmbra/qa-toolkit/main/qa_bootstrap_audit.py
+curl -O https://raw.githubusercontent.com/felipeUmbra/qa-toolkit/main/initqa.prompt.md
+python qa_toolkit_refresh.py --apply
+```
 
-| Platform | Location |
+Or download `initqa.prompt.md` straight from the repo page in your browser.
+Keep the filename exactly as `initqa.prompt.md` — the command name comes
+from it.
+
+> **A note on `main` URLs.** This repo has *measured* the raw `main` URL
+> serving the previous file after a push, with a `?cb=<timestamp>` cache-buster
+> failing to defeat it. If you want a guaranteed-current file rather than
+> probably-current, replace `main` with a commit SHA:
+>
+> ```bash
+> curl -O https://raw.githubusercontent.com/felipeUmbra/qa-toolkit/6c12a229c6d5569e77d3b7c5f91ecaff97986464/initqa.prompt.md
+> ```
+>
+> If a fetch fails, **say so** rather than reconstructing the file — a
+> hand-written replacement carries the very bugs this toolkit exists to
+> remove.
+
+### 2. Put it where VS Code looks for prompts
+
+| Platform | Folder |
 |---|---|
-| Windows | `%APPDATA%\Code\User\prompts\` |
-| macOS | `~/Library/Application Support/Code/User/prompts/` |
-| Linux | `~/.config/Code/User/prompts/` |
+| **Windows** | `%APPDATA%\Code\User\prompts\` |
+| **macOS** | `~/Library/Application Support/Code/User/prompts/` |
+| **Linux** | `~/.config/Code/User/prompts/` |
 
-The command name comes from the filename, so the file must be called
-`initqa.prompt.md`. It needs no network and no install, which is why it is the
-recommended path — see "Why embed rather than fetch" below.
+Create the folder if it does not exist.
 
-### Keeping it current: `qa_toolkit_refresh.py`
+```powershell
+# Windows, one-liner
+mkdir "$env:APPDATA\Code\User\prompts" -Force
+Copy-Item initqa.prompt.md "$env:APPDATA\Code\User\prompts\"
+```
 
-A dropped-in file drifts. `qa_toolkit_refresh.py` compares the version marker
-inside your installed prompt against the published `VERSION` and tells you
-only when something changed.
+### 3. Run it
+
+1. Open your project folder in VS Code.
+2. Open Chat (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>).
+3. Type **`/initqa`** and pick it from the list.
+
+> **If `/initqa` does not appear**, reload the window
+> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> → *Developer: Reload Window*).
+> The command is discovered at startup, so a prompt added mid-session will not
+> show up until you reload. Also confirm the file is in your **user** prompts
+> folder, not inside the project.
+
+You can pass a path: `/initqa ../another-repo`.
+
+### 4. Answer the questions
+
+Phase 1 asks about the choices it genuinely cannot infer — test runner, E2E
+driver, accessibility approach, viewports, PR policy, external APIs, and
+whether defects get filed automatically. Each question offers at most three
+options with a recommendation. Everything else it reads from your repo.
+
+### 5. Watch it work
+
+The run ends with Phase 10, which **breaks something on purpose** and confirms
+each gate turns red, then reverts. That step is the point: a gate nobody has
+seen fail is not a gate.
+
+---
+
+## What `/initqa` creates in your project
+
+Nothing is written until Phase 2 has read what you already have, so you never
+get a second test runner or a duplicate CI job. In a typical project you get:
+
+| Path | What it is | Phase |
+|---|---|---|
+| `scripts/qa_bootstrap_audit.py` | Read-only quality audit | 2 |
+| `tests/` + a test config | Unit/integration suite, thresholds in config | 3 |
+| `tests/fixtures/` | Fakes for auth, storage, external APIs | 4 |
+| `e2e/` or `tests/e2e/` | E2E specs, page objects, one selectors module | 5 |
+| a11y checks | `axe-core` scan + a contrast script | 6 |
+| `.github/workflows/ci-gates.yml` | Type-check, unit, a11y, E2E on every PR | 7 |
+| `.github/workflows/defect-hunt.yml` | Manual hunt, nightly backstop, CI triage | 7 |
+| `.github/agents/<name>.agent.md` | **Your** project QA agent — repo facts only | 8 |
+| GitHub labels + issue templates | So a defect can actually be filed | 9 |
+
+Exact paths follow your stack's conventions — the prompt reads your repo rather
+than imposing a layout. It also wires `package.json` scripts so the gates are
+runnable locally, not only in CI.
+
+### The two workflows
+
+**`ci-gates.yml`** runs on every pull request. Two rules in it are not optional:
+
+- **Browser cache keys must be per-browser.** One key derived from a lockfile
+  means the first job populates the cache and every other job reports
+  `cache-hit=true`, skips the browser install, and fails at launch with
+  `Executable doesn't exist`. That reads as a product failure and is not one.
+  It has taken 90 of 94 tests.
+- **The browser install must be unconditional.** Any `if:` on it means a cache
+  hit silently skips installation — the same failure by a different route.
+
+**`defect-hunt.yml`** is what makes the defect register reachable. It invokes
+the QA agent three ways: on demand, on a schedule as a backstop, and after a CI
+failure. Without a workflow that actually calls the agent, bug-filing rules are
+a comment that reads like a guarantee — which is exactly how a real defect sat
+in the first commit of a real repo, survived ~49 commits, and was fixed without
+ever being registered.
+
+> Until you add the agent's API key as a repository secret, **comment out the
+> scheduled trigger.** A nightly red build nobody reads trains everyone to
+> ignore red builds, which is the same failure as a gate nobody watches.
+
+---
+
+## Keeping it up to date
+
+Your installed file drifts, because this repo gains fixes and the copy on disk
+does not. Fetch `qa_toolkit_refresh.py` from this repo and run it:
 
 ```bash
 python qa_toolkit_refresh.py             # silent unless an update exists
 python qa_toolkit_refresh.py --json      # state, local and remote version
-python qa_toolkit_refresh.py --apply     # download and install
-python qa_toolkit_refresh.py --strict    # exit 1 unless current
+python qa_toolkit_refresh.py --apply     # download and install the new prompt
 ```
 
-It auto-detects the installed prompt; `--dest` overrides the path.
+It finds your installed prompt by itself.
 
-| State | Meaning | Caller should |
+| State | What it means | What to do |
 |---|---|---|
-| `current` | Matches published | Say nothing, carry on |
-| `stale` | Newer version exists | Offer it, **but never block** |
-| `offline` | No network | Say nothing, carry on exactly as before |
-| `ambiguous` | A server answered unusably | Treat as `stale`, mention in one line |
-| `missing` | No version marker | Carry on silently |
+| `current` | You match this repo | Nothing |
+| `stale` | A newer version exists | Run with `--apply` |
+| `offline` | No network, or unreachable | Nothing — carry on |
+| `ambiguous` | A server answered but the answer is unusable | Treat as `stale` |
+| `missing` | No version marker in the file | Nothing |
 
-Three deliberate properties:
+`/initqa` runs this check itself as **Phase 0**, and it is deliberately
+non-blocking: up to date, offline, or an update offered — the flow continues
+either way. A bootstrap that fails because a laptop is on a train is a
+bootstrap nobody runs.
 
-- **It never blocks.** No network is the expected state on a train or behind a
-  proxy. A bootstrap that fails offline is a bootstrap nobody runs.
-- **Offline is silent, and always exits 0.** Only `--strict` returns non-zero,
-  so it is safe in a pipeline.
-- **Untrustworthy is never reported as `current`.** An HTTP 404, a rate limit
-  or unparseable JSON becomes `ambiguous`, not "up to date". A redundant
+Two details worth knowing:
+
+- **It compares versions through the GitHub contents API**, not a raw file.
+  Measured on this repo, the raw `main` URL kept serving the *previous* file
+  after a push, and a `?cb=<timestamp>` cache-buster did not defeat it. A stale
+  tool is worse than a missing one, because a missing one is visibly missing.
+- **Untrustworthy is never reported as `current`.** A 404, a rate limit, or an
+  unparseable response becomes `ambiguous`, not "up to date". A redundant
   "an update is available" line costs one line; silently believing you are
   current is the failure this toolkit exists to prevent.
 
-`--apply` refuses to overwrite your prompt with anything that lacks frontmatter
-and a version marker, so a truncated download cannot destroy a working file.
+---
 
-### Why embed rather than fetch
+## Other tools
 
-Measured on this repository: after a commit landed on `main`, the
-`raw.githubusercontent.com`/main URL kept serving the *previous* file for an
-extended period, and a `?cb=<timestamp>` cache-buster **did not defeat it**:
+Use these directly if you want to check a repo without running the whole flow.
 
-| URL form | Result after a push |
-|---|---|
-| `.../main/qa_bootstrap_audit.py` | stale — old content |
-| `.../main/...py?cb=12345` | stale — cache-buster ignored |
-| `.../<SHA>/qa_bootstrap_audit.py` | current |
-
-`main` gives an agent a script that looks fine and quietly lacks every recent
-fix — a stale diagnostic is worse than a missing one, because a missing one is
-visibly missing. So the refresh helper compares versions through the **GitHub
-contents API**, which reflects the current ref, rather than fetching a raw file.
-
-If you must fetch standalone files, pin a SHA and keep the filename — the tests
-`import qa_bootstrap_audit`, so renaming it breaks them, and a suite that
-cannot run is worse than none. Treat a fetch failure as a hard stop; never
-reconstruct a tool from memory.
-
-## Bumping the version
-
-`VERSION` holds a single token (`v1`). It is the single source of truth for the
-marker embedded in the prompt:
+### `qa_bootstrap_audit.py` — read-only audit
 
 ```bash
-# edit VERSION, then:
-python build_prompt.py
-python -m unittest discover
-```
-
-`build_prompt.py` reads `VERSION` rather than hardcoding it, and
-`test_prompt.py` asserts the built prompt carries that exact marker — so a bump
-cannot be forgotten when the prompt is rebuilt.
-
-## Tools
-
-### `qa_toolkit_refresh.py` — freshness check
-
-See "Keeping it current" above. Tri-state, non-blocking, standard library only.
-
-```bash
-python qa_toolkit_refresh.py             # silent unless an update exists
-python qa_toolkit_refresh.py --apply     # download and install
-```
-
-### `qa_bootstrap_audit.py` — read-only
-
-```bash
-python qa_bootstrap_audit.py                 # audit cwd
+python qa_bootstrap_audit.py                 # audit the current folder
 python qa_bootstrap_audit.py /path/to/repo
 python qa_bootstrap_audit.py --json          # machine-readable
 python qa_bootstrap_audit.py --strict        # exit 1 on any warning
 ```
 
-Detects, per layer: present / wired, plus the stack. Warns on `agent-never-invoked`,
+Reports each quality layer as **present** or **wired** — an unwired gate cannot
+fail, however many files it has. Warns on `agent-never-invoked`,
 `no-retest-before-close`, `no-ci`, `not-a-git-repo`.
 
 It runs no tests, opens no network connection, and writes nothing — safe on any
 repo, including one you have never seen. **Run it before scaffolding anything**;
 half the value is not building a second runner on top of an existing one.
 
-### `templates.md` — copy-paste starting points
+### `templates.md` — the two workflows
 
-`ci-gates.yml` (type-check + unit + a11y + E2E on every PR) and
-`defect-hunt.yml` (manual hunt / nightly backstop / CI triage). Placeholders
-marked `<...>`; delete what does not apply.
+`ci-gates.yml` and `defect-hunt.yml` with placeholders marked `<...>`. Also
+embedded in `initqa.prompt.md`. A template that does not parse is worse than
+none, because it gets copied verbatim and only fails in CI.
 
-A template that does not parse is worse than none, because it gets copied
-verbatim and only fails in CI.
+---
 
-## Tests
+## Why these exist
+
+Each tool answers a failure that actually happened in a real repository:
+
+| Failure | What went wrong | What catches it |
+|---|---|---|
+| **Uninvoked rule** | Agent documented "file every Medium/High defect"; no workflow ever invoked the agent. A defect sat in the **first commit**, survived ~49 commits, and was found and fixed without ever being registered. | `qa_bootstrap_audit.py` → `agent-never-invoked` |
+| **Unwired gate** | A whole test layer existed, wired into no npm script and no CI job. It could not fail anything. | `qa_bootstrap_audit.py` → "cannot gate" gap |
+| **Silent zero-match** | Python's `glob` does not expand braces, so `**/*.{js,ts}` matched nothing and the audit reported a healthy repo as untested. Under-reporting is trusted, so it is the worst failure a diagnostic can have. | `test_qa_bootstrap_audit.py` → explicit brace expansion |
+| **Shared cache key** | Two CI jobs shared one browser cache key; 90 of 94 tests failed at launch, reading as a product failure. | `templates.md` + `test_templates.py` |
+| **Triage on green** | A CI-failure triage job re-read a *passing* suite every run. | `test_templates.py` → triage gated on failure |
+| **Silent stale copy** | A tool fetched from a URL that serves old content looks authoritative and quietly lacks every recent fix. | embed instead of fetch + `qa_toolkit_refresh.py` |
+
+---
+
+## Development
 
 ```bash
-python -m unittest discover -v      # all
-python test_qa_bootstrap_audit.py   # audit only
-python test_templates.py            # templates only
+python -m unittest discover -v      # 70 tests
+python build_prompt.py              # regenerate initqa.prompt.md
 ```
 
-No pytest dependency on purpose: these must run anywhere, including a machine
-that has only the standard library.
+`initqa.prompt.md` is **generated**. Edit `build_prompt.py`, not the output —
+a hand-edited prompt is reverted on the next build, and the tests will catch
+you. The build reads `VERSION` rather than hardcoding it and inlines the audit
+script verbatim, so the prompt cannot drift from the file that has tests behind
+it.
 
-`test_qa_bootstrap_audit.py` pins a bug that shipped once already: **Python's
-`glob` does not expand braces**, so `**/*.{js,ts}` silently matched nothing and
-the audit reported a healthy repo as untested. A silent zero-match is
-indistinguishable from "absent" — the worst possible failure for a diagnostic,
-because it under-reports and is therefore trusted. The fix is explicit brace
-expansion with a regression test.
+To release a new version:
 
-`test_templates.py` parses every YAML fence and asserts the structural
-invariants that are easy to break by hand: per-browser cache keys, an
-unconditional browser install, three triggers, `issues: write` without
-`contents: write`, triage gated on failure, and heredoc bodies indented inside
-their `run: |` block.
+```bash
+# edit VERSION, then:
+python build_prompt.py
+python -m unittest discover
+git commit -am "release v2" && git push
+```
+
+`test_prompt.py` asserts the built prompt carries the exact `VERSION` marker,
+so a bump cannot be forgotten when the prompt is rebuilt.
+
+### Test layout
+
+| File | Covers |
+|---|---|
+| `test_qa_bootstrap_audit.py` | the audit, including the brace-expansion bug |
+| `test_templates.py` | every YAML fence parses; per-browser cache keys; unconditional install; three triggers; `issues: write` without `contents: write`; triage gated on failure; heredoc indentation |
+| `test_prompt.py` | frontmatter, fence balance, embedded script is byte-identical and still executes, builder/artifact agreement |
+| `test_qa_toolkit_refresh.py` | current / stale / offline / ambiguous / missing, install safety |
+
+No pytest dependency on purpose — these must run anywhere, including a machine
+with only the standard library.
+
+---
 
 ## Known limits
 
-- Detects *presence* and *wiring*, not correctness. It cannot tell you a test
-  asserts nothing useful — coverage percentage cannot either.
+- The audit detects **presence and wiring, not correctness**. It cannot tell you
+  a test asserts nothing useful; coverage percentage cannot either.
 - "No test names this file" is weak evidence. Suites usually drive the UI
   through selectors, not source paths.
-- `--strict` warns; it does not fix. It is a signal for a human.
-- The hosted URLs below must stay reachable. If one 404s, **say so** rather than
-  writing the tool from memory — a reconstructed script will carry the bugs this
-  toolkit exists to remove.
+- `qa_bootstrap_audit.py --strict` warns; it does not fix. It is a signal for a
+  human.
+- The refresh check needs network access to be useful. Offline it reports
+  `offline` and changes nothing, which is intentional.
+- If a hosted file 404s, **say so** rather than reconstructing the tool from
+  memory — a hand-written replacement carries the very bugs this toolkit exists
+  to remove.
+
+## Licence
+
+MIT.

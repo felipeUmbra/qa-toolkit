@@ -246,7 +246,26 @@ class CliTests(unittest.TestCase):
         missing = os.path.join(self.tmp, "nope", "initqa.prompt.md")
         code, out = self._run(["--dest", missing], fake_fetch({}))
         self.assertEqual(code, 0)
-        self.assertIn("not found", out)
+        self.assertIn("not installed", out)
+
+    def test_apply_installs_when_no_prompt_exists_yet(self):
+        """First-time setup. The README's quickstart is exactly this path.
+
+        It used to do nothing: MISSING was not in the set of states that
+        triggers --apply, so a user following the documented install command
+        on a clean machine got 'not found' and no file.
+        """
+        fresh = os.path.join(self.tmp, "brand-new", "initqa.prompt.md")
+        fetch = fake_fetch({
+            "/contents/VERSION": api_contents(version_file("v1")),
+            "/contents/initqa.prompt.md": api_contents(
+                CURRENT_PROMPT.replace("v9", "v1")),
+        })
+        code, out = self._run(["--dest", fresh, "--apply"], fetch)
+        self.assertEqual(code, 0)
+        self.assertTrue(os.path.exists(fresh), "no prompt was installed")
+        with open(fresh, encoding="utf-8") as fh:
+            self.assertIn("toolkit-version: v1", fh.read())
 
     def test_offline_never_nets_out_of_scope_urls(self):
         """It must only ever ask the API about VERSION and the prompt."""

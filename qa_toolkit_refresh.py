@@ -300,7 +300,7 @@ def main(argv=None, client=None, fetch=None):
             result["remote_version"] = remote
             result["detail"] = detail
 
-        needs_update = result["state"] in (STALE, AMBIGUOUS)
+        needs_update = result["state"] in (STALE, AMBIGUOUS, MISSING)
         if args.apply and needs_update:
             ok, message = apply_update(client, dest, local_version)
             result["updated"] = ok
@@ -308,8 +308,12 @@ def main(argv=None, client=None, fetch=None):
 
         if args.as_json:
             print(json.dumps(result, indent=2, sort_keys=True))
+        elif result["state"] == MISSING and result["updated"]:
+            print(result["detail"])
         elif result["state"] == MISSING:
-            print("initqa prompt not found at %s" % dest)
+            print("initqa prompt not installed at %s" % dest)
+            print("Run with --apply to install it, or copy initqa.prompt.md "
+                  "there yourself.")
         elif needs_update:
             print("initqa toolkit %s -> %s available."
                   % (result["local_version"] or "unknown",
