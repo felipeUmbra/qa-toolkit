@@ -2,7 +2,7 @@
 description: "Set up this project's quality flow from scratch - interview the user, then scaffold tests, accessibility gates, CI, a project QA agent, and a defect register in the right order."
 argument-hint: "[optional: path to audit, defaults to the workspace]"
 agent: "agent"
-tools: ["codebase", "search", "usages", "problems", "editFiles", "createFile", "runCommands", "runTasks", "runTests", "testFailure", "terminalLastCommand", "terminalSelection", "getTaskOutput", "killTerminal", "notebooks", "githubRepo", "github_text_search", "fetch"]
+tools: ["codebase", "search", "usages", "problems", "editFiles", "createFile", "runCommands", "runTasks", "runTests", "testFailure", "terminalLastCommand", "terminalSelection", "getTaskOutput", "killTerminal", "notebooks", "githubRepo", "github_text_search", "fetch", "vscode/askQuestions"]
 ---
 
 # Initialise this project's quality flow

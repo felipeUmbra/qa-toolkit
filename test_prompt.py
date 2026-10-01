@@ -145,6 +145,41 @@ class WorkflowContent(unittest.TestCase):
     def test_warns_about_schedule_without_secret(self):
         self.assertIn("comment out the scheduled trigger", self.text)
 
+    def test_every_tool_the_body_names_is_granted(self):
+        """A tool named in prose but absent from `tools:` is a silent no-op.
+
+        The body told the agent to use the askQuestions tool while the
+        frontmatter did not grant it. The agent would then either skip the
+        interview - the one phase that cannot be skipped - or guess, and the
+        prompt would still look perfectly correct to the reader.
+
+        So assert the invariant rather than the one known instance: any tool
+        referenced by name in the body must appear in the granted list.
+        """
+        granted = frontmatter(self.text).get("tools") or []
+        granted_names = {t.split("/")[-1].lower() for t in granted}
+
+        # Tools the body refers to by name, in backticks or bold.
+        body = self.text.split("\n---\n", 1)[-1]
+        referenced = set()
+        for pattern in (
+            r"\*\*(\w+)\*\* tool",
+            r"the \*\*(\w+)\*\* tool",
+            r"#tool:[\w/]+",
+        ):
+            for hit in re.findall(pattern, body, re.I):
+                referenced.add(hit.split("/")[-1].lower())
+
+        self.assertTrue(
+            referenced,
+            "no tool references found - the patterns need updating, not deleting",
+        )
+        missing = referenced - granted_names
+        self.assertEqual(
+            missing, set(),
+            "body references tools the prompt does not grant: %s" % sorted(missing),
+        )
+
     def test_templates_include_both_traps(self):
         blocks = fenced_blocks(self.text)
         templates = "\n".join(b for lang, b in blocks if lang == "markdown")
