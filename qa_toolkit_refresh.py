@@ -163,9 +163,20 @@ class Client(object):
 
 
 def read_version(text):
-    """Pull the version marker out of toolkit text. Empty string if absent."""
+    """Pull a version token out of toolkit text.
+
+    Accepts either a bare token (the VERSION file, e.g. "v3") or the HTML
+    comment marker embedded in a prompt. Handling both is deliberate: the
+    remote VERSION file holds only the bare token, while a local install has
+    the marker, so reading only one form made every remote lookup fail.
+    """
     match = MARKER_RE.search(text or "")
-    return match.group(1) if match else ""
+    if match:
+        return match.group(1)
+    stripped = (text or "").strip()
+    if stripped and re.fullmatch(r"v?\d+(?:\.\d+)*(?:[-+][\w.]+)?", stripped):
+        return stripped
+    return ""
 
 
 def looks_like_prompt(text):

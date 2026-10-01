@@ -47,7 +47,20 @@ def api_contents(text):
 
 
 def marker(version):
+    """The HTML comment form embedded in a built prompt."""
     return "<!-- toolkit-version: %s -->" % version
+
+
+def version_file(version):
+    """The bare-token form the remote VERSION file actually contains.
+
+    This distinction is load-bearing. The first version of these tests used
+    marker() for the remote VERSION payload, so every case passed while the
+    real helper failed against the real API - it looked for a comment in a
+    file that holds nothing but "v3". Fake data must match production shape or
+    it proves nothing.
+    """
+    return version
 
 
 CURRENT_PROMPT = "---\ndescription: x\n---\n\n# hi\n" + marker("v9")
@@ -65,7 +78,7 @@ class StateTests(unittest.TestCase):
         if raise_exc is not None:
             payloads["/contents/VERSION"] = raise_exc
         else:
-            payloads["/contents/VERSION"] = api_contents(marker(version))
+            payloads["/contents/VERSION"] = api_contents(version_file(version))
         if prompt is not None:
             payloads["/contents/initqa.prompt.md"] = prompt
         fetch = fake_fetch(payloads)
@@ -118,6 +131,24 @@ class StateTests(unittest.TestCase):
         client, _ = self._client(raise_exc="this is not json")
         state, _r, _d = refresh.classify("v9", client)
         self.assertEqual(state, refresh.AMBIGUOUS)
+
+    def test_reads_a_bare_token_as_well_as_a_marker(self):
+        """Regression: the remote VERSION file holds only a bare token.
+
+        The original implementation searched for the HTML comment marker in
+        both places, so against the real API it found nothing and reported
+        'ambiguous' forever - while every test passed, because the fakes
+        used marker-formatted payloads the real repo never sends.
+        """
+        self.assertEqual(refresh.read_version("v12"), "v12")
+        self.assertEqual(refresh.read_version("  v12\n"), "v12")
+        self.assertEqual(refresh.read_version(marker("v12")), "v12")
+        self.assertEqual(refresh.read_version("not a version"), "")
+        self.assertEqual(refresh.read_version(""), "")
+
+    def test_remote_version_reads_a_real_bare_token(self):
+        client, _ = self._client(version="v42")
+        self.assertEqual(client.remote_version(), "v42")
 
 
 class InstallTests(unittest.TestCase):
@@ -186,14 +217,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["updated"], False)
 
     def test_stale_run_offers_the_update(self):
-        fetch = fake_fetch({"/contents/VERSION": api_contents(marker("v10"))})
+        fetch = fake_fetch({"/contents/VERSION": api_contents(version_file("v10"))})
         code, out = self._run(["--dest", self.dest], fetch)
         self.assertEqual(code, 0)
         self.assertIn("v9 -> v10", out)
         self.assertIn("--apply", out)
 
     def test_current_run_is_silent(self):
-        fetch = fake_fetch({"/contents/VERSION": api_contents(marker("v9"))})
+        fetch = fake_fetch({"/contents/VERSION": api_contents(version_file("v9"))})
         code, out = self._run(["--dest", self.dest], fetch)
         self.assertEqual(code, 0)
         self.assertEqual(out.strip(), "")
@@ -219,7 +250,7 @@ class CliTests(unittest.TestCase):
 
     def test_offline_never_nets_out_of_scope_urls(self):
         """It must only ever ask the API about VERSION and the prompt."""
-        fetch = fake_fetch({"/contents/VERSION": api_contents(marker("v9"))})
+        fetch = fake_fetch({"/contents/VERSION": api_contents(version_file("v9"))})
         self._run(["--dest", self.dest], fetch)
         for url in fetch.calls:
             self.assertTrue(
