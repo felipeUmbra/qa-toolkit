@@ -6,7 +6,7 @@ tools: ["codebase", "search", "usages", "problems", "editFiles", "createFile", "
 ---
 
 # Initialise this project's quality flow
-
+<!-- toolkit-version: v1 -->
 Your job is to stand up a working quality flow for THIS repository, in the
 right order, and to prove each piece actually gates. Work through the phases
 below in order. Do not skip phase 1 - asking is not optional.
@@ -17,6 +17,43 @@ Two rules govern everything else:
   prevent a second runner or a duplicated CI job.
 - **A gate that has never been seen failing is not a gate.** Phase 9 exists
   because scaffolding nobody verified is decoration.
+
+---
+
+## Phase 0 - Check this prompt is current (non-blocking)
+
+You may be running an older copy of this prompt. The repository it came from
+gains fixes; an installed file does not. A stale bootstrap prompt is worse than
+none, because it still reads as authoritative - it will happily scaffold a
+quality flow using guidance already found to be wrong.
+
+Check your own version marker against the published one. Run the shipped helper:
+
+```bash
+python qa_toolkit_refresh.py            # silent unless an update exists
+python qa_toolkit_refresh.py --json     # state, local and remote version
+python qa_toolkit_refresh.py --apply    # download and install
+```
+
+Act on the state like this, and never block on any of it:
+
+| State | What it means | What you do |
+|---|---|---|
+| `current` | You match the published version | Say nothing. Continue to phase 1. |
+| `stale` | A newer version exists | Tell the user the version pair and offer to install it. **Continue regardless** - never block phase 1 on a download. |
+| `offline` | No network, or unreachable | Say nothing. Continue exactly as you would have. This is expected on a train, behind a proxy, or in an air-gapped environment. |
+| `ambiguous` | A server answered but the answer is unusable | Treat as `stale` and mention it in one line. An untrustworthy answer is never treated as `current`. |
+| `missing` | This prompt has no version marker | Continue silently. Do not reconstruct the refresh logic from memory. |
+
+Three rules govern this phase:
+
+1. **Never block the bootstrap on the network.** If the check fails, times out,
+   or cannot run at all, proceed. A bootstrap that fails on a train is a
+   bootstrap nobody runs.
+2. **Never announce a check that did not happen.** Only report a version if you
+   actually compared two, and say plainly when you could not.
+3. **Never reconstruct the refresh logic from memory** if the helper is
+   missing. Download it, or report that it is absent.
 
 ---
 

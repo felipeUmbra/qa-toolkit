@@ -20,20 +20,63 @@ tool here exists because that specific failure happened in a real repository:
 
 ## Fetching these from the agent
 
-Pin to a commit SHA. **Do not fetch from `main`.**
+### Preferred: `/initqa` (self-contained, no fetch at all)
 
+`initqa.prompt.md` in this repo **embeds the audit script and both workflow
+templates inline**. Drop it into your prompts folder and run `/initqa`:
+
+| Platform | Location |
+|---|---|
+| Windows | `%APPDATA%\Code\User\prompts\` |
+| macOS | `~/Library/Application Support/Code/User/prompts/` |
+| Linux | `~/.config/Code/User/prompts/` |
+
+The command name comes from the filename, so the file must be called
+`initqa.prompt.md`. It needs no network and no install, which is why it is the
+recommended path — see "Why embed rather than fetch" below.
+
+### Keeping it current: `qa_toolkit_refresh.py`
+
+A dropped-in file drifts. `qa_toolkit_refresh.py` compares the version marker
+inside your installed prompt against the published `VERSION` and tells you
+only when something changed.
+
+```bash
+python qa_toolkit_refresh.py             # silent unless an update exists
+python qa_toolkit_refresh.py --json      # state, local and remote version
+python qa_toolkit_refresh.py --apply     # download and install
+python qa_toolkit_refresh.py --strict    # exit 1 unless current
 ```
-https://raw.githubusercontent.com/felipeUmbra/qa-toolkit/<SHA>/qa_bootstrap_audit.py
-```
 
-**Keep the filename.** Save it as `qa_bootstrap_audit.py`. The test modules
-`import qa_bootstrap_audit`, so renaming it makes them fail to import — and a
-test suite that cannot run is worse than none. This was found by simulating a
-fresh machine and renaming the file, which is the only way to find it.
+It auto-detects the installed prompt; `--dest` overrides the path.
 
-Verified behaviour: after a commit landed on `main`, the `main` URL kept serving
-the *previous* file for an extended period, and a `?cb=<timestamp>` cache-buster
-**did not defeat it**. The SHA-pinned URL served the new content immediately.
+| State | Meaning | Caller should |
+|---|---|---|
+| `current` | Matches published | Say nothing, carry on |
+| `stale` | Newer version exists | Offer it, **but never block** |
+| `offline` | No network | Say nothing, carry on exactly as before |
+| `ambiguous` | A server answered unusably | Treat as `stale`, mention in one line |
+| `missing` | No version marker | Carry on silently |
+
+Three deliberate properties:
+
+- **It never blocks.** No network is the expected state on a train or behind a
+  proxy. A bootstrap that fails offline is a bootstrap nobody runs.
+- **Offline is silent, and always exits 0.** Only `--strict` returns non-zero,
+  so it is safe in a pipeline.
+- **Untrustworthy is never reported as `current`.** An HTTP 404, a rate limit
+  or unparseable JSON becomes `ambiguous`, not "up to date". A redundant
+  "an update is available" line costs one line; silently believing you are
+  current is the failure this toolkit exists to prevent.
+
+`--apply` refuses to overwrite your prompt with anything that lacks frontmatter
+and a version marker, so a truncated download cannot destroy a working file.
+
+### Why embed rather than fetch
+
+Measured on this repository: after a commit landed on `main`, the
+`raw.githubusercontent.com`/main URL kept serving the *previous* file for an
+extended period, and a `?cb=<timestamp>` cache-buster **did not defeat it**:
 
 | URL form | Result after a push |
 |---|---|
@@ -41,12 +84,41 @@ the *previous* file for an extended period, and a `?cb=<timestamp>` cache-buster
 | `.../main/...py?cb=12345` | stale — cache-buster ignored |
 | `.../<SHA>/qa_bootstrap_audit.py` | current |
 
-So `main` gives an agent a script that looks fine and quietly lacks every recent
-fix. Pin the SHA, and treat a fetch failure as a hard stop — never reconstruct
-the tool from memory, because a reconstructed script carries the bugs this
-toolkit exists to remove.
+`main` gives an agent a script that looks fine and quietly lacks every recent
+fix — a stale diagnostic is worse than a missing one, because a missing one is
+visibly missing. So the refresh helper compares versions through the **GitHub
+contents API**, which reflects the current ref, rather than fetching a raw file.
+
+If you must fetch standalone files, pin a SHA and keep the filename — the tests
+`import qa_bootstrap_audit`, so renaming it breaks them, and a suite that
+cannot run is worse than none. Treat a fetch failure as a hard stop; never
+reconstruct a tool from memory.
+
+## Bumping the version
+
+`VERSION` holds a single token (`v1`). It is the single source of truth for the
+marker embedded in the prompt:
+
+```bash
+# edit VERSION, then:
+python build_prompt.py
+python -m unittest discover
+```
+
+`build_prompt.py` reads `VERSION` rather than hardcoding it, and
+`test_prompt.py` asserts the built prompt carries that exact marker — so a bump
+cannot be forgotten when the prompt is rebuilt.
 
 ## Tools
+
+### `qa_toolkit_refresh.py` — freshness check
+
+See "Keeping it current" above. Tri-state, non-blocking, standard library only.
+
+```bash
+python qa_toolkit_refresh.py             # silent unless an update exists
+python qa_toolkit_refresh.py --apply     # download and install
+```
 
 ### `qa_bootstrap_audit.py` — read-only
 

@@ -22,6 +22,8 @@ import yaml
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROMPT = os.path.join(HERE, "initqa.prompt.md")
 AUDIT = os.path.join(HERE, "qa_bootstrap_audit.py")
+BUILD = os.path.join(HERE, "build_prompt.py")
+VERSION = os.path.join(HERE, "VERSION")
 
 
 def prompt_text():
@@ -118,6 +120,53 @@ class Fences(unittest.TestCase):
             self.assertEqual(r.returncode, 0,
                              f"extracted script failed: {r.stderr[:400]}")
             self.assertIn("QA bootstrap audit", r.stdout)
+
+
+class BuildDriftTests(unittest.TestCase):
+    """The prompt is generated. Guard the generator, not just the output.
+
+    A fix applied to initqa.prompt.md but not to build_prompt.py survives
+    exactly until the next rebuild, which then silently reverts it. That is
+    not hypothetical: the tools list lost its askQuestions grant this way, and
+    the prompt tests passed the whole time because they read the built file.
+    """
+
+    def setUp(self):
+        with open(BUILD, encoding="utf-8") as fh:
+            self.builder = fh.read()
+
+    def test_builder_grants_every_tool_the_built_prompt_grants(self):
+        """The built artifact is the reference; the generator must match it."""
+        built = frontmatter(prompt_text())
+        granted_built = set(built.get("tools") or [])
+        self.assertTrue(granted_built, "built prompt grants no tools at all")
+
+        match = re.search(r"(?m)^tools:\s*\[(.*?)\]", self.builder, re.S)
+        self.assertIsNotNone(match, "builder has no tools: list")
+        granted_src = set(re.findall(r'"([^"]+)"', match.group(1)))
+
+        self.assertEqual(
+            granted_src, granted_built,
+            "build_prompt.py tools list differs from the built prompt; a rebuild "
+            "would silently change behaviour",
+        )
+
+    def test_builder_does_not_hardcode_a_version(self):
+        """Version comes from the VERSION file so a bump cannot be forgotten."""
+        self.assertIn("VERSION_FILE", self.builder,
+                      "builder must read VERSION rather than hardcode it")
+        # The placeholder is legitimate - build_prompt.py substitutes it. What
+        # must never happen is a literal version string baked into the source.
+        self.assertIn('.replace("{VERSION}", VERSION)', self.builder)
+        hardcoded = re.findall(r'(?m)^version\s*=\s*[\'"](v?\d[\w.]*)[\'"]',
+                               self.builder)
+        self.assertEqual(hardcoded, [], "builder hardcodes a version literal")
+
+    def test_built_prompt_carries_the_current_version_marker(self):
+        with open(VERSION, encoding="utf-8") as fh:
+            expected = fh.read().strip()
+        self.assertTrue(expected, "VERSION file is empty")
+        self.assertIn("toolkit-version: %s" % expected, prompt_text())
 
 
 class WorkflowContent(unittest.TestCase):

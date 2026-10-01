@@ -4,12 +4,28 @@ The script is inlined from the tested source rather than copied by hand, so the
 prompt cannot drift from the file that has 31 passing tests behind it. A
 hand-copied copy would be a second source of truth and would eventually be
 wrong without anyone noticing.
+
+VERSION drives the freshness marker that qa_toolkit_refresh.py compares. It is
+read from the single VERSION file rather than hardcoded here, so bumping the
+version cannot be forgotten when the prompt is rebuilt.
 """
 import io
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AUDIT = os.path.join(HERE, "qa_bootstrap_audit.py")
+VERSION_FILE = os.path.join(HERE, "VERSION")
+
+
+def read_version():
+    with open(VERSION_FILE, encoding="utf-8") as fh:
+        version = fh.read().strip()
+    if not version:
+        raise SystemExit("VERSION is empty - refusing to build an unversioned prompt")
+    return version
+
+
+VERSION = read_version()
 
 # Fence must be longer than any backtick run inside the embedded content.
 def fence_for(text, base="```"):
@@ -31,11 +47,11 @@ BODY = '''---
 description: "Set up this project's quality flow from scratch - interview the user, then scaffold tests, accessibility gates, CI, a project QA agent, and a defect register in the right order."
 argument-hint: "[optional: path to audit, defaults to the workspace]"
 agent: "agent"
-tools: ["codebase", "search", "usages", "problems", "editFiles", "createFile", "runCommands", "runTasks", "runTests", "testFailure", "terminalLastCommand", "terminalSelection", "getTaskOutput", "killTerminal", "notebooks", "githubRepo", "github_text_search", "fetch"]
+tools: ["codebase", "search", "usages", "problems", "editFiles", "createFile", "runCommands", "runTasks", "runTests", "testFailure", "terminalLastCommand", "terminalSelection", "getTaskOutput", "killTerminal", "notebooks", "githubRepo", "github_text_search", "fetch", "vscode/askQuestions"]
 ---
 
 # Initialise this project's quality flow
-
+<!-- toolkit-version: {VERSION} -->
 Your job is to stand up a working quality flow for THIS repository, in the
 right order, and to prove each piece actually gates. Work through the phases
 below in order. Do not skip phase 1 - asking is not optional.
@@ -46,6 +62,43 @@ Two rules govern everything else:
   prevent a second runner or a duplicated CI job.
 - **A gate that has never been seen failing is not a gate.** Phase 9 exists
   because scaffolding nobody verified is decoration.
+
+---
+
+## Phase 0 - Check this prompt is current (non-blocking)
+
+You may be running an older copy of this prompt. The repository it came from
+gains fixes; an installed file does not. A stale bootstrap prompt is worse than
+none, because it still reads as authoritative - it will happily scaffold a
+quality flow using guidance already found to be wrong.
+
+Check your own version marker against the published one. Run the shipped helper:
+
+```bash
+python qa_toolkit_refresh.py            # silent unless an update exists
+python qa_toolkit_refresh.py --json     # state, local and remote version
+python qa_toolkit_refresh.py --apply    # download and install
+```
+
+Act on the state like this, and never block on any of it:
+
+| State | What it means | What you do |
+|---|---|---|
+| `current` | You match the published version | Say nothing. Continue to phase 1. |
+| `stale` | A newer version exists | Tell the user the version pair and offer to install it. **Continue regardless** - never block phase 1 on a download. |
+| `offline` | No network, or unreachable | Say nothing. Continue exactly as you would have. This is expected on a train, behind a proxy, or in an air-gapped environment. |
+| `ambiguous` | A server answered but the answer is unusable | Treat as `stale` and mention it in one line. An untrustworthy answer is never treated as `current`. |
+| `missing` | This prompt has no version marker | Continue silently. Do not reconstruct the refresh logic from memory. |
+
+Three rules govern this phase:
+
+1. **Never block the bootstrap on the network.** If the check fails, times out,
+   or cannot run at all, proceed. A bootstrap that fails on a train is a
+   bootstrap nobody runs.
+2. **Never announce a check that did not happen.** Only report a version if you
+   actually compared two, and say plainly when you could not.
+3. **Never reconstruct the refresh logic from memory** if the helper is
+   missing. Download it, or report that it is absent.
 
 ---
 
@@ -250,11 +303,18 @@ watched it fail.
 '''
 
 out = BODY.replace("{FENCE}", FENCE).replace("{audit_src}", audit_src) \
-          .replace("{TFENCE}", TFENCE).replace("{templates}", templates)
+          .replace("{TFENCE}", TFENCE).replace("{templates}", templates) \
+          .replace("{VERSION}", VERSION)
 
 # Strip the outer .format() braces used above; verify none leaked.
-for leaked in ("{FENCE}", "{audit_src}", "{TFENCE}", "{templates}"):
+for leaked in ("{FENCE}", "{audit_src}", "{TFENCE}", "{templates}", "{VERSION}"):
     assert leaked not in out, f"placeholder leaked: {leaked}"
+
+# The freshness marker is what qa_toolkit_refresh.py compares against a local
+# copy. If it is missing, a stale install is indistinguishable from a current
+# one, which is the exact failure this marker exists to prevent.
+marker = "<!-- toolkit-version: %s -->" % VERSION
+assert marker in out, "version marker missing from generated prompt"
 
 target = os.path.join(HERE, "initqa.prompt.md")
 with open(target, "w", encoding="utf-8", newline="\n") as fh:
@@ -262,3 +322,4 @@ with open(target, "w", encoding="utf-8", newline="\n") as fh:
 print(f"wrote {target}")
 print(f"  {len(out.splitlines())} lines, {len(out)} chars")
 print(f"  fence: {FENCE!r} / {TFENCE!r}")
+print(f"  version: {VERSION}")
